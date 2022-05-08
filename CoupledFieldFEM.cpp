@@ -56,9 +56,6 @@ void CoupledFieldFEM<dim>::solve2()
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
-
-    print_vec(Fud, "Fud.txt");
-    print_vec(FTd, "FTd.txt");
 }
 
 template<unsigned int dim>
