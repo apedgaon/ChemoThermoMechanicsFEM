@@ -30,8 +30,10 @@ public:
     Material mat;
     Mesh2<dim> mesh;
     std::vector<DirichletBC> dirBCs;
+    std::vector<DirichletBC> dirBCsT;
     int phytype;    // Physics Type
     SolutionScheme sol_scheme;
+    unsigned int nsteps;
 
     QuadratureType quadrature_type;
     unsigned int Nq;

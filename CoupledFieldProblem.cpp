@@ -52,6 +52,7 @@ void Part1()
 
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics;
+    fem.nsteps = 1;
 
     fem.initialize();
     fem.solve();
@@ -76,9 +77,44 @@ void Part2()
     fem.mesh.divs[1] = 3;
     fem.generate_mesh();
 
+    for (unsigned int idx = 0; idx < fem.mesh.Nnd; ++idx)
+    {
+        double x = fem.mesh.nodal_coords[idx][0];
+        double y = fem.mesh.nodal_coords[idx][1];
+        if (fabs(x - 0.0) < 1.0e-8)
+        {
+            DirichletBC dbc;
+            dbc.node = idx;
+            dbc.dof = 0;
+            dbc.val = 0.0;
+            fem.dirBCs.push_back(dbc);
+        }
+        else if (fabs(x - fem.geom.length[0]) < 1.0e-8)
+        {
+            DirichletBC dbc;
+            dbc.node = idx;
+            dbc.dof = 0;
+            dbc.val = 0.1;
+            fem.dirBCs.push_back(dbc);
+
+            dbc.val = 1; // degree C
+            fem.dirBCsT.push_back(dbc);
+        }
+
+        if (fabs(y - 0.0) < 1.0e-8)
+        {
+            DirichletBC dbc;
+            dbc.node = idx;
+            dbc.dof = 1;
+            dbc.val = 0.0;
+            fem.dirBCs.push_back(dbc);
+        }
+    }
+
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal;
     fem.sol_scheme = SolutionScheme::staggered;
+    fem.nsteps = 10;
 
     fem.initialize();
     fem.solve2();

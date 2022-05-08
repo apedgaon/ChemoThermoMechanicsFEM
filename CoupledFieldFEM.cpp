@@ -53,6 +53,12 @@ void CoupledFieldFEM<dim>::solve2()
 {
     // Assemble stiffness and force
     assemble2();
+
+    // Apply Dirichlet Boundary conditions
+    apply_dirBC();
+
+    print_vec(Fud, "Fud.txt");
+    print_vec(FTd, "FTd.txt");
 }
 
 template<unsigned int dim>
@@ -545,6 +551,27 @@ void CoupledFieldFEM<dim>::create_dirichlet_map()
             dirmapu.push_back(dim * idx + idim);
         }
     }
+
+    if (phytype & PhysicsType::_Thermal)
+    {
+        dirBCsize = static_cast<unsigned int>(dirBCsT.size());
+        ucdofsT = gdofsT - dirBCsize;       // unconstrained dofs
+        dirmapT.reserve(ucdofsT);
+        auto dir_itr = dirBCsT.begin();
+        for (unsigned int idx = 0; idx < mesh.Nnd; ++idx)
+        {
+            if (dir_itr != dirBCsT.end())
+            {
+                if (idx == dir_itr->node)
+                {
+                    ++dir_itr;
+                    continue;
+                }
+            }
+
+            dirmapT.push_back(idx);
+        }
+    }
 }
 
 template<unsigned int dim>
@@ -571,6 +598,43 @@ void CoupledFieldFEM<dim>::apply_dirBC()
         du(gidx) = dirBC.val;
         for (unsigned int idx = 0; idx < ucdofsu; ++idx)
             Fud(idx) -= Kuu(dirmapu[idx], gidx) * dirBC.val;
+    }
+
+    if (phytype & PhysicsType::_Thermal)
+    {
+        KTTd = Eigen::MatrixXd::Zero(ucdofsT, ucdofsT);
+        KuTd = Eigen::MatrixXd::Zero(ucdofsu, ucdofsT);
+        MTTd = Eigen::MatrixXd::Zero(ucdofsT, ucdofsT);
+        FTd = Eigen::VectorXd::Zero(ucdofsT);
+        dTd.resize(ucdofsT);
+
+        for (unsigned int jdx = 0; jdx < ucdofsT; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ucdofsT; ++idx)
+            {
+                KTTd(idx, jdx) = KTT(dirmapT[idx], dirmapT[jdx]);
+                MTTd(idx, jdx) = MTT(dirmapT[idx], dirmapT[jdx]);
+            }
+
+            FTd(jdx) = FT(dirmapT[jdx]);
+        }
+
+        for (unsigned int jdx = 0; jdx < ucdofsT; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+                KuTd(idx, jdx) = KuT(dirmapu[idx], dirmapT[jdx]);
+        }
+
+        for (auto& dirBC : dirBCsT)
+        {
+            unsigned gidx = dirBC.node;
+            dT(gidx) = dirBC.val;
+            for (unsigned int idx = 0; idx < ucdofsT; ++idx)
+                FTd(idx) -= KTT(dirmapT[idx], gidx) * dirBC.val;
+
+            for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+                Fud(idx) -= KuT(dirmapu[idx], gidx) * dirBC.val;
+        }
     }
 }
 
