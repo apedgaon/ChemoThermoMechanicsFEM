@@ -62,8 +62,19 @@ private:
     Eigen::VectorXd Fud;
     Eigen::VectorXd dud;
 
-    unsigned int gdofs;
-    unsigned int ucdofs;
+    unsigned int gdofsu;
+    unsigned int ucdofsu;
+    std::vector<unsigned int> dirmapu;
 
-    std::vector<unsigned int> dirmap;
+    Eigen::MatrixXd KT;
+    Eigen::VectorXd FT;
+    Eigen::VectorXd dT;
+
+    Eigen::MatrixXd KTd;
+    Eigen::VectorXd FTd;
+    Eigen::VectorXd dTd;
+
+    unsigned int gdofsT;
+    unsigned int ucdofsT;
+    std::vector<unsigned int> dirmapT;
 };

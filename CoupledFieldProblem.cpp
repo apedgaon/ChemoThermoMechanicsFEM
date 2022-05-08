@@ -84,7 +84,7 @@ void Part2()
 
 int main(int argc, char* argv[])
 {
-    //Part1();
+    Part1();
     Part2();
     return 0;
 }

@@ -16,10 +16,18 @@ void CoupledFieldFEM<dim>::initialize()
     init_shp_functions();
 
     // Initialize global vectors
-    gdofs = mesh.Nnd * dim;
-    Ku = Eigen::MatrixXd::Zero(gdofs, gdofs);
-    Fu = Eigen::VectorXd::Zero(gdofs);
-    du = Eigen::VectorXd::Zero(gdofs);
+    gdofsu = mesh.Nnd * dim;
+    Ku = Eigen::MatrixXd::Zero(gdofsu, gdofsu);
+    Fu = Eigen::VectorXd::Zero(gdofsu);
+    du = Eigen::VectorXd::Zero(gdofsu);
+
+    //if (phytype & PhysicsType::_Thermal)
+    //{
+    //    gdofsT = mesh.Nnd;
+    //    KT = Eigen::MatrixXd::Zero(gdofsT, gdofsT);
+    //    FT = Eigen::VectorXd::Zero(gdofsT);
+    //    dT = Eigen::VectorXd::Zero(gdofsT);
+    //}
 }
 
 template<unsigned int dim>
@@ -335,8 +343,8 @@ void CoupledFieldFEM<dim>::create_dirichlet_map()
     // Creates a local map of unconstrained dofs
     // dirBCs should be sorted for this to work currently
     unsigned int dirBCsize = static_cast<unsigned int>(dirBCs.size());
-    ucdofs = gdofs - dirBCsize;       // unconstrained dofs
-    dirmap.reserve(ucdofs);
+    ucdofsu = gdofsu - dirBCsize;       // unconstrained dofs
+    dirmapu.reserve(ucdofsu);
     unsigned int offset = 0;
     auto dir_itr = dirBCs.begin();
     for (unsigned int idx = 0; idx < mesh.Nnd; ++idx)
@@ -352,7 +360,7 @@ void CoupledFieldFEM<dim>::create_dirichlet_map()
                 }
             }
 
-            dirmap.push_back(dim * idx + idim);
+            dirmapu.push_back(dim * idx + idim);
         }
     }
 }
@@ -364,23 +372,23 @@ void CoupledFieldFEM<dim>::apply_dirBC()
 
     create_dirichlet_map();
 
-    Kud = Eigen::MatrixXd::Zero(ucdofs, ucdofs);
-    Fud = Eigen::VectorXd::Zero(ucdofs);
-    dud.resize(ucdofs);
-    for (unsigned int jdx = 0; jdx < ucdofs; ++jdx)
+    Kud = Eigen::MatrixXd::Zero(ucdofsu, ucdofsu);
+    Fud = Eigen::VectorXd::Zero(ucdofsu);
+    dud.resize(ucdofsu);
+    for (unsigned int jdx = 0; jdx < ucdofsu; ++jdx)
     {
-        for (unsigned int idx = 0; idx < ucdofs; ++idx)
-            Kud(idx, jdx) = Ku(dirmap[idx], dirmap[jdx]);
+        for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+            Kud(idx, jdx) = Ku(dirmapu[idx], dirmapu[jdx]);
 
-        Fud(jdx) = Fu(dirmap[jdx]);
+        Fud(jdx) = Fu(dirmapu[jdx]);
     }
 
     for (auto& dirBC : dirBCs)
     {
         unsigned gidx = dirBC.node * dim + dirBC.dof;
         du(gidx) = dirBC.val;
-        for (unsigned int idx = 0; idx < ucdofs; ++idx)
-            Fud(idx) -= Ku(dirmap[idx], gidx) * dirBC.val;
+        for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+            Fud(idx) -= Ku(dirmapu[idx], gidx) * dirBC.val;
     }
 }
 
@@ -388,8 +396,8 @@ template<unsigned int dim>
 void CoupledFieldFEM<dim>::reform_full_sol()
 {
     // Constructs full solution vector from solutions at unconstrained dofs
-    for (unsigned int idx = 0; idx < ucdofs; ++idx)
-        du(dirmap[idx]) = dud(idx);
+    for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+        du(dirmapu[idx]) = dud(idx);
 }
 
 template<unsigned int dim>
