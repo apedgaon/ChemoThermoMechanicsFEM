@@ -67,6 +67,7 @@ void Part2()
     fem.mat.lambda = 5.769230769230769e-05; // N/cm^2
     fem.mat.mu = 3.846153846153846e-05;     // N/cm^2
     fem.mat.init_elasticity_tensor();
+    fem.mat.D_T = 0.01;  // W/cm-K
     fem.mat.init_isotropic_thermal_exp(1.0);    // K^-1
 
     fem.mesh.mesh_type = MeshType::quadrilateral;
@@ -80,11 +81,12 @@ void Part2()
     fem.sol_scheme = SolutionScheme::staggered;
 
     fem.initialize();
+    fem.solve();
 }
 
 int main(int argc, char* argv[])
 {
-    Part1();
+    //Part1();
     Part2();
     return 0;
 }

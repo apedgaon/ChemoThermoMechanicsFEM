@@ -17,30 +17,31 @@ void CoupledFieldFEM<dim>::initialize()
 
     // Initialize global vectors
     gdofsu = mesh.Nnd * dim;
-    Ku = Eigen::MatrixXd::Zero(gdofsu, gdofsu);
+    Kuu = Eigen::MatrixXd::Zero(gdofsu, gdofsu);
     Fu = Eigen::VectorXd::Zero(gdofsu);
     du = Eigen::VectorXd::Zero(gdofsu);
 
-    //if (phytype & PhysicsType::_Thermal)
-    //{
-    //    gdofsT = mesh.Nnd;
-    //    KT = Eigen::MatrixXd::Zero(gdofsT, gdofsT);
-    //    FT = Eigen::VectorXd::Zero(gdofsT);
-    //    dT = Eigen::VectorXd::Zero(gdofsT);
-    //}
+    if (phytype & PhysicsType::_Thermal)
+    {
+        gdofsT = mesh.Nnd;
+        KTT = Eigen::MatrixXd::Zero(gdofsT, gdofsT);
+        FT = Eigen::VectorXd::Zero(gdofsT);
+        dT = Eigen::VectorXd::Zero(gdofsT);
+        KuT = Eigen::MatrixXd::Zero(gdofsu, gdofsT);
+    }
 }
 
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::solve()
 {
     // Assemble stiffness and force
-    assemble();
+    assemble2();
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
 
     // Solve linear system of equations using Cholesky
-    dud = Kud.ldlt().solve(Fud);
+    dud = Kuud.ldlt().solve(Fud);
 
     // Reform full solution vector
     reform_full_sol();
@@ -252,7 +253,67 @@ void CoupledFieldFEM<dim>::assemble()
         for (unsigned int jdx = 0; jdx < ldofs; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofs; ++idx)
-                Ku(gidx(idx), gidx(jdx)) += Kl(idx, jdx);
+                Kuu(gidx(idx), gidx(jdx)) += Kl(idx, jdx);
+
+            Fu(gidx(jdx)) += Fl(jdx);
+        }
+    }
+}
+
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::assemble2()
+{
+    // Initialize local arrays and variables
+    unsigned int ldofs = mesh.Nen * dim;
+    Eigen::MatrixXd Kl;                      // Local Stiffness
+    Eigen::VectorXd Fl;                      // Local Force
+    Eigen::MatrixXd xe(dim, mesh.Nen);       // Local Coordinates of nodes
+    Eigen::VectorXui gidx(ldofs);            // Global index of local dofs
+    Eigen::VectorXd de(mesh.Nen * dim);      // Local nodal displacements
+    Eigen::MatrixXd jac(dim, dim);           // Quadrature Isoparamteric Jacobian
+    Eigen::MatrixXd jac_inv(dim, dim);       // Quadrature Isoparamteric Jacobian Inverse
+    Eigen::MatrixXd dNdX(mesh.Nen, dim);     // Quadrature dN / dX matrices
+    double det_jac;                          // Determinant of Isoparametric Jacobian
+
+    unsigned int ldofsT = mesh.Nen;
+    Eigen::MatrixXd KuTl;
+    Eigen::MatrixXd KTTl;
+    Eigen::VectorXui gidxT(ldofsT);
+    Eigen::VectorXd Te(ldofsT);
+
+    // Element Loop
+    for (auto& conn : mesh.elem_conn)
+    {
+        // Initialize local stiffness and force
+        Kl = Eigen::MatrixXd::Zero(ldofs, ldofs);
+        Fl = Eigen::VectorXd::Zero(ldofs);
+        KTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
+        KuTl = Eigen::MatrixXd::Zero(ldofs, ldofsT);
+
+        // Compute Elemental quantities (elem coords and solutions)
+        compute_elem_quantities(conn, gidx, xe, de);
+        compute_elem_quantitiesT(conn, gidxT, Te);
+
+        // Quadrature Loop
+        for (unsigned int iq = 0; iq < Nq; ++iq)
+        {
+            // Compute Quadrature Derivatives
+            compute_quad_derivatives(iq, xe, jac, jac_inv, dNdX, det_jac);
+
+            // Compute and add stiffness to local stiffness matrix
+            compute_quad_stiff(iq, dNdX, det_jac, Kl);
+            compute_quad_stiffTT(iq, dNdX, det_jac, KTTl);
+            compute_quad_stiffuT(iq, dNdX, det_jac, KuTl);
+
+            // Not impl compute_quad_force()
+        }
+
+        // Global Assembly Kl -> K, Fl -> F
+        for (unsigned int jdx = 0; jdx < ldofs; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ldofs; ++idx)
+                Kuu(gidx(idx), gidx(jdx)) += Kl(idx, jdx);
 
             Fu(gidx(jdx)) += Fl(jdx);
         }
@@ -275,6 +336,18 @@ void CoupledFieldFEM<dim>::compute_elem_quantities(connectivity& conn, Eigen::Ve
         }
     }
 }
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_elem_quantitiesT(connectivity& conn, Eigen::VectorXui& gidxT, Eigen::VectorXd& Te)
+{
+    // Computes global index and local temperatures
+    for (unsigned int ind = 0; ind < mesh.Nen; ++ind)
+    {
+        gidxT(ind) = conn[ind];
+        Te(ind) = dT(gidxT(ind));
+    }
+}
+
 
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::compute_quad_derivatives(unsigned int iq, Eigen::MatrixXd& xe, Eigen::MatrixXd& jac,
@@ -338,6 +411,75 @@ void CoupledFieldFEM<dim>::compute_quad_stiff(unsigned int iq, Eigen::MatrixXd& 
 }
 
 template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_quad_stiffTT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KTTl)
+{
+    double temp, temp2;
+
+    // Compute Local Temperature Stiffness (-> integral (w^T_,i  D^T (C_jkmn a_jk a_mn + 1)  T_,i) dV)
+    for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
+    {
+        for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
+        {
+            temp = 0.0;
+            for (unsigned int idim = 0; idim < dim; ++idim)
+            {
+                temp2 = 0.0;
+
+                // C_jkmn alpha_jk alpha_mn
+                for (unsigned int jdim = 0; jdim < dim; ++jdim)
+                {
+                    for (unsigned int kdim = 0; kdim < dim; ++kdim)
+                    {
+                        for (unsigned int ldim = 0; ldim < dim; ++ldim)
+                        {
+                            for (unsigned int mdim = 0; mdim < dim; ++mdim)
+                                temp2 += mat.C[jdim][kdim][ldim][mdim] * mat.alpha_T[jdim][kdim] * mat.alpha_T[ldim][mdim];
+                        }
+                    }
+                }
+
+                // dNdx(A, i) * (C_
+                temp += dNdX(ashp, idim) * mat.D_T * (temp2 + 1.0) * dNdX(bshp, idim);
+            }
+
+            KTTl(ashp, bshp) += temp * wts(iq) * det_jac;
+        }
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_quad_stiffuT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KuTl)
+{
+    unsigned int loc_idx;
+    double temp, temp2;
+
+    for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
+    {
+        for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
+        {
+            for (unsigned int idim = 0; idim < dim; ++idim)
+            {
+                loc_idx = dim * ashp + idim;
+                temp = 0.0;
+                for (unsigned int jdim = 0; jdim < dim; ++jdim)
+                {
+                    temp2 = 0.0;
+                    for (unsigned int kdim = 0; kdim < dim; ++kdim)
+                    {
+                        for (unsigned int ldim = 0; ldim < dim; ++ldim)
+                            temp2 += mat.C[idim][jdim][kdim][ldim] * mat.alpha_T[kdim][ldim];
+                    }
+
+                    temp += dNdX(ashp, jdim) * temp2 * N(bshp, iq);
+                }
+
+                KuTl(loc_idx, bshp) += temp * wts(iq) * det_jac;
+            }
+        }
+    }
+}
+
+template<unsigned int dim>
 void CoupledFieldFEM<dim>::create_dirichlet_map()
 {
     // Creates a local map of unconstrained dofs
@@ -372,13 +514,13 @@ void CoupledFieldFEM<dim>::apply_dirBC()
 
     create_dirichlet_map();
 
-    Kud = Eigen::MatrixXd::Zero(ucdofsu, ucdofsu);
+    Kuud = Eigen::MatrixXd::Zero(ucdofsu, ucdofsu);
     Fud = Eigen::VectorXd::Zero(ucdofsu);
     dud.resize(ucdofsu);
     for (unsigned int jdx = 0; jdx < ucdofsu; ++jdx)
     {
         for (unsigned int idx = 0; idx < ucdofsu; ++idx)
-            Kud(idx, jdx) = Ku(dirmapu[idx], dirmapu[jdx]);
+            Kuud(idx, jdx) = Kuu(dirmapu[idx], dirmapu[jdx]);
 
         Fud(jdx) = Fu(dirmapu[jdx]);
     }
@@ -388,7 +530,7 @@ void CoupledFieldFEM<dim>::apply_dirBC()
         unsigned gidx = dirBC.node * dim + dirBC.dof;
         du(gidx) = dirBC.val;
         for (unsigned int idx = 0; idx < ucdofsu; ++idx)
-            Fud(idx) -= Ku(dirmapu[idx], gidx) * dirBC.val;
+            Fud(idx) -= Kuu(dirmapu[idx], gidx) * dirBC.val;
     }
 }
 
