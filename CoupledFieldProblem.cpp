@@ -72,8 +72,8 @@ void Part2()
 
     fem.mesh.mesh_type = MeshType::quadrilateral;
     fem.mesh.shp_func_type = ShapeFcnType::lagrange_linear;
-    fem.mesh.divs[0] = 10;
-    fem.mesh.divs[1] = 5;
+    fem.mesh.divs[0] = 3;
+    fem.mesh.divs[1] = 3;
     fem.generate_mesh();
 
     fem.quadrature_type = QuadratureType::two_point;
@@ -81,7 +81,7 @@ void Part2()
     fem.sol_scheme = SolutionScheme::staggered;
 
     fem.initialize();
-    fem.solve();
+    fem.solve2();
 }
 
 int main(int argc, char* argv[])

@@ -23,6 +23,7 @@ public:
     void generate_mesh();
     void initialize();
     void solve();
+    void solve2();
     void post_print(std::string file);
 
     Geometry<dim> geom;
@@ -52,6 +53,7 @@ private:
     void compute_quad_stiff(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& Kl);
     void compute_quad_stiffTT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KTTl);
     void compute_quad_stiffuT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KuTl);
+    void compute_quad_massTT(unsigned iq, double det_jac, Eigen::MatrixXd& MTTl);
     void apply_dirBC();
     void create_dirichlet_map();
     void reform_full_sol();

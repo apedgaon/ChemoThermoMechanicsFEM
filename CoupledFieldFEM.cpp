@@ -25,6 +25,7 @@ void CoupledFieldFEM<dim>::initialize()
     {
         gdofsT = mesh.Nnd;
         KTT = Eigen::MatrixXd::Zero(gdofsT, gdofsT);
+        MTT = Eigen::MatrixXd::Zero(gdofsT, gdofsT);
         FT = Eigen::VectorXd::Zero(gdofsT);
         dT = Eigen::VectorXd::Zero(gdofsT);
         KuT = Eigen::MatrixXd::Zero(gdofsu, gdofsT);
@@ -35,7 +36,7 @@ template<unsigned int dim>
 void CoupledFieldFEM<dim>::solve()
 {
     // Assemble stiffness and force
-    assemble2();
+    assemble();
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
@@ -45,6 +46,13 @@ void CoupledFieldFEM<dim>::solve()
 
     // Reform full solution vector
     reform_full_sol();
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::solve2()
+{
+    // Assemble stiffness and force
+    assemble2();
 }
 
 template<unsigned int dim>
@@ -279,6 +287,8 @@ void CoupledFieldFEM<dim>::assemble2()
     unsigned int ldofsT = mesh.Nen;
     Eigen::MatrixXd KuTl;
     Eigen::MatrixXd KTTl;
+    Eigen::MatrixXd MTTl;
+    Eigen::VectorXd FTl;
     Eigen::VectorXui gidxT(ldofsT);
     Eigen::VectorXd Te(ldofsT);
 
@@ -290,6 +300,8 @@ void CoupledFieldFEM<dim>::assemble2()
         Fl = Eigen::VectorXd::Zero(ldofs);
         KTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
         KuTl = Eigen::MatrixXd::Zero(ldofs, ldofsT);
+        MTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
+        FTl = Eigen::VectorXd::Zero(ldofsT);
 
         // Compute Elemental quantities (elem coords and solutions)
         compute_elem_quantities(conn, gidx, xe, de);
@@ -306,6 +318,10 @@ void CoupledFieldFEM<dim>::assemble2()
             compute_quad_stiffTT(iq, dNdX, det_jac, KTTl);
             compute_quad_stiffuT(iq, dNdX, det_jac, KuTl);
 
+            // Compute and add to local mass matrix
+            compute_quad_massTT(iq, det_jac, MTTl);
+            
+
             // Not impl compute_quad_force()
         }
 
@@ -316,6 +332,20 @@ void CoupledFieldFEM<dim>::assemble2()
                 Kuu(gidx(idx), gidx(jdx)) += Kl(idx, jdx);
 
             Fu(gidx(jdx)) += Fl(jdx);
+        }
+
+        for (unsigned int jdx = 0; jdx < ldofsT; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ldofsT; ++idx)
+            {
+                KTT(gidxT(idx), gidxT(jdx)) += KTTl(idx, jdx);
+                MTT(gidxT(idx), gidxT(jdx)) += MTTl(idx, jdx);
+            }
+
+            FT(gidxT(jdx)) += FTl(jdx);
+
+            for (unsigned int idx = 0; idx < ldofs; ++idx)
+                KuT(gidx(idx), gidxT(jdx)) += KuTl(idx, jdx);
         }
     }
 }
@@ -476,6 +506,16 @@ void CoupledFieldFEM<dim>::compute_quad_stiffuT(unsigned int iq, Eigen::MatrixXd
                 KuTl(loc_idx, bshp) += temp * wts(iq) * det_jac;
             }
         }
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_quad_massTT(unsigned iq, double det_jac, Eigen::MatrixXd& MTTl)
+{
+    for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
+    {
+        for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
+            MTTl(ashp, bshp) += N(ashp, iq) * N(bshp, iq) * wts(iq) * det_jac;
     }
 }
 
