@@ -34,6 +34,7 @@ public:
     int phytype;    // Physics Type
     SolutionScheme sol_scheme;
     unsigned int nsteps;
+    double end_time;
 
     QuadratureType quadrature_type;
     unsigned int Nq;

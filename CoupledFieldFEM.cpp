@@ -56,6 +56,20 @@ void CoupledFieldFEM<dim>::solve2()
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
+
+    double delta_t = end_time / nsteps;
+    Eigen::VectorXd vTd;
+    dTd = Eigen::VectorXd::Zero(ucdofsT);
+    for (unsigned int istep = 1; istep <= nsteps; ++istep)
+    {
+        vTd = MTTd.ldlt().solve(FTd - KTTd * dTd);
+        dTd += delta_t * vTd;
+
+        dud = Kuud.ldlt().solve(Fud + KuTd * dTd);
+    }
+
+    // Reform full solution vector
+    reform_full_sol();
 }
 
 template<unsigned int dim>
@@ -66,6 +80,13 @@ void CoupledFieldFEM<dim>::post_print(std::string file)
     // Write vtk file with mesh and solutions
     std::cout << "*** Writing VTK file - " << file.c_str() << ".vtu\n";
     fem_to_vtk_vector(file, mesh.elem_conn, mesh.nodal_coords, du);
+
+    if (phytype & PhysicsType::_Thermal)
+    {
+        file = file + std::string("T");
+        std::cout << "*** Writing VTK file - " << file.c_str() << ".vtu\n";
+        fem_to_vtk_scalar(file, mesh.elem_conn, mesh.nodal_coords, dT);
+    }
 }
 
 
@@ -641,6 +662,12 @@ void CoupledFieldFEM<dim>::reform_full_sol()
     // Constructs full solution vector from solutions at unconstrained dofs
     for (unsigned int idx = 0; idx < ucdofsu; ++idx)
         du(dirmapu[idx]) = dud(idx);
+
+    if (phytype & PhysicsType::_Thermal)
+    {
+        for (unsigned int idx = 0; idx < ucdofsT; ++idx)
+            dT(dirmapT[idx]) = dTd(idx);
+    }
 }
 
 template<unsigned int dim>

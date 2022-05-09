@@ -73,8 +73,8 @@ void Part2()
 
     fem.mesh.mesh_type = MeshType::quadrilateral;
     fem.mesh.shp_func_type = ShapeFcnType::lagrange_linear;
-    fem.mesh.divs[0] = 3;
-    fem.mesh.divs[1] = 3;
+    fem.mesh.divs[0] = 10;
+    fem.mesh.divs[1] = 5;
     fem.generate_mesh();
 
     for (unsigned int idx = 0; idx < fem.mesh.Nnd; ++idx)
@@ -114,15 +114,17 @@ void Part2()
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal;
     fem.sol_scheme = SolutionScheme::staggered;
-    fem.nsteps = 10;
+    fem.nsteps = 50000;
+    fem.end_time = 1000;
 
     fem.initialize();
     fem.solve2();
+    fem.post_print("part2");
 }
 
 int main(int argc, char* argv[])
 {
-    //Part1();
+    Part1();
     Part2();
     return 0;
 }

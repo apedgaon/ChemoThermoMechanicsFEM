@@ -908,6 +908,108 @@ void fem_to_vtk_vector(std::string file, std::vector<connectivity>& ec, std::vec
     }
 }
 
+void fem_to_vtk_scalar(std::string file, std::vector<connectivity>& ec, std::vector<coords>& nc, Eigen::VectorXd& d)
+{
+    file = file + std::string(".vtu");
+    std::ofstream vtk_stream(file.c_str());
+    if (vtk_stream.is_open())
+    {
+        vtk_stream << "<?xml version=\"1.0\"?>\n";
+        vtk_stream << "<VTKFile type=\"UnstructuredGrid\"  version=\"0.1\"  >\n";
+        vtk_stream << "<UnstructuredGrid>\n";
+        auto num_elems = ec.size();
+        auto num_nodes = nc.size();
+        auto dim_num = nc[0].size();
+
+        // Nodal coords
+        vtk_stream << "<Piece  NumberOfPoints=\"" << num_nodes << "\"  NumberOfCells=\"" << num_elems << "\">\n";
+        vtk_stream << "<Points>\n";
+        vtk_stream << "<DataArray  type=\"Float32\"  NumberOfComponents=\"" << 3 << "\"  format=\"ascii\">\n";
+        for (auto& ncoords : nc)
+        {
+            for (auto ncoord : ncoords)
+                vtk_stream << std::setprecision(16) << ncoord << "\t";
+
+            if (dim_num == 2)
+                vtk_stream << 0.0;
+
+            vtk_stream << "\n";
+        }
+        vtk_stream << "</DataArray>\n";
+
+        // Element Connectivity
+        vtk_stream << "</Points>\n";
+        vtk_stream << "<Cells>\n";
+        vtk_stream << "<DataArray  type=\"UInt32\"  Name=\"connectivity\"  format=\"ascii\">\n";
+        for (auto& conn : ec)
+        {
+            for (auto nd_id : conn)
+                vtk_stream << nd_id << "\t";
+
+            vtk_stream << "\n";
+        }
+        vtk_stream << "</DataArray>\n";
+
+        // Offsets
+        vtk_stream << "<DataArray  type=\"UInt32\"  Name=\"offsets\"  format=\"ascii\">\n";
+        size_t offset = 0;
+        for (auto& conn : ec)
+        {
+            offset += conn.size();
+            vtk_stream << offset << "\n";
+        }
+        vtk_stream << "</DataArray>\n";
+
+        // Element Types
+        vtk_stream << "<DataArray  type=\"UInt8\"  Name=\"types\"  format=\"ascii\">\n";
+        size_t elem_type = 0;
+        for (auto& conn : ec)
+        {
+            auto elem_order = conn.size();
+            if ((dim_num == 2) && (elem_order == 3))
+                elem_type = 5;
+            else if ((dim_num == 2) && (elem_order == 4))
+                elem_type = 9;
+            else if ((dim_num == 2) && (elem_order == 9))
+                elem_type = 28;
+            else if ((dim_num == 3) && (elem_order == 4))
+                elem_type = 10;
+            else if ((dim_num == 3) && (elem_order == 8))
+                elem_type = 12;
+            else
+                throw std::exception();
+
+            vtk_stream << elem_type << "\n";
+        }
+        vtk_stream << "</DataArray>\n";
+        vtk_stream << "</Cells>\n";
+
+        // vector field
+        vtk_stream << "<PointData  Scalars=\"u\">\n";
+        vtk_stream << "<DataArray  type=\"Float32\"  Name=\"ScalarField\"  NumberOfComponents=\"" << 1 << "\"  format=\"ascii\">\n";
+        auto field_size = dim_num;
+        for (size_t ind = 0; ind < num_nodes; ++ind)
+        {
+            //for (size_t ifld = 0; ifld < field_size; ++ifld)
+            //    vtk_stream << d(ind * field_size + ifld) << "\t";
+
+            //if (dim_num == 2)
+            //    vtk_stream << 0.0;
+
+            //vtk_stream << "\n";
+            vtk_stream << d(ind) << "\n";
+        }
+        vtk_stream << "</DataArray>\n";
+        vtk_stream << "</PointData> \n";
+
+        vtk_stream << "</Piece> \n";
+        vtk_stream << "</UnstructuredGrid> \n";
+        vtk_stream << "</VTKFile> \n";
+
+        vtk_stream.close();
+    }
+}
+
 /////////////////////////////////////////////////////////////////////////////
 //                        Instantiate Mesh<dim>                            //
 /////////////////////////////////////////////////////////////////////////////
