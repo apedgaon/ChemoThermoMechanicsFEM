@@ -651,7 +651,7 @@ void CoupledFieldFEM<dim>::apply_dirBC()
                 FTd(idx) -= KTT(dirmapT[idx], gidx) * dirBC.val;
 
             for (unsigned int idx = 0; idx < ucdofsu; ++idx)
-                Fud(idx) -= KuT(dirmapu[idx], gidx) * dirBC.val;
+                Fud(idx) += KuT(dirmapu[idx], gidx) * dirBC.val;
         }
     }
 }
