@@ -89,6 +89,9 @@ void CoupledFieldFEM<dim>::solve3()
 {
     // Assemble stiffness and force
     assemble3();
+
+    // Apply Dirichlet Boundary conditions
+    apply_dirBC();
 }
 
 template<unsigned int dim>
@@ -845,6 +848,27 @@ void CoupledFieldFEM<dim>::create_dirichlet_map()
             dirmapT.push_back(idx);
         }
     }
+
+    if (phytype & PhysicsType::_Chemical)
+    {
+        dirBCsize = static_cast<unsigned int>(dirBCsc.size());
+        ucdofsc = gdofsc - dirBCsize;       // unconstrained dofs
+        dirmapc.reserve(ucdofsc);
+        auto dir_itr = dirBCsc.begin();
+        for (unsigned int idx = 0; idx < mesh.Nnd; ++idx)
+        {
+            if (dir_itr != dirBCsc.end())
+            {
+                if (idx == dir_itr->node)
+                {
+                    ++dir_itr;
+                    continue;
+                }
+            }
+
+            dirmapc.push_back(idx);
+        }
+    }
 }
 
 template<unsigned int dim>
@@ -907,6 +931,61 @@ void CoupledFieldFEM<dim>::apply_dirBC()
 
             for (unsigned int idx = 0; idx < ucdofsu; ++idx)
                 Fud(idx) += KuT(dirmapu[idx], gidx) * dirBC.val;
+        }
+    }
+
+    if (phytype & (PhysicsType::_Thermal | PhysicsType::_Chemical))
+    {
+        Kccd = Eigen::MatrixXd::Zero(ucdofsc, ucdofsc);
+        Kucd = Eigen::MatrixXd::Zero(ucdofsu, ucdofsc);
+        Mccd = Eigen::MatrixXd::Zero(ucdofsc, ucdofsc);
+        KcTd = Eigen::MatrixXd::Zero(ucdofsc, ucdofsT);
+        KTcd = Eigen::MatrixXd::Zero(ucdofsT, ucdofsc);
+        Fcd = Eigen::VectorXd::Zero(ucdofsc);
+        dcd.resize(ucdofsc);
+
+        for (unsigned int jdx = 0; jdx < ucdofsc; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ucdofsc; ++idx)
+            {
+                Kccd(idx, jdx) = Kcc(dirmapc[idx], dirmapc[jdx]);
+                Mccd(idx, jdx) = Mcc(dirmapc[idx], dirmapc[jdx]);
+            }
+
+            for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+                Kucd(idx, jdx) = Kuc(dirmapu[idx], dirmapc[jdx]);
+
+            for (unsigned int idx = 0; idx < ucdofsT; ++idx)
+                KTcd(idx, jdx) = KTc(dirmapT[idx], dirmapc[jdx]);
+
+            Fcd(jdx) = Fc(dirmapc[jdx]);
+        }
+
+        for (unsigned int jdx = 0; jdx < ucdofsT; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ucdofsc; ++idx)
+                KcTd(idx, jdx) = KcT(dirmapc[idx], dirmapT[jdx]);
+        }
+
+        for (auto& dirBC : dirBCsc)
+        {
+            unsigned gidx = dirBC.node;
+            dc(gidx) = dirBC.val;
+            for (unsigned int idx = 0; idx < ucdofsc; ++idx)
+                Fcd(idx) -= Kcc(dirmapc[idx], gidx) * dirBC.val;
+
+            for (unsigned int idx = 0; idx < ucdofsu; ++idx)
+                Fud(idx) += Kuc(dirmapu[idx], gidx) * dirBC.val;
+
+            for (unsigned int idx = 0; idx < ucdofsT; ++idx)
+                FTd(idx) -= KTc(dirmapT[idx], gidx) * dirBC.val;
+        }
+
+        for (auto& dirBC : dirBCsT)
+        {
+            unsigned gidx = dirBC.node;
+            for (unsigned int idx = 0; idx < ucdofsc; ++idx)
+                Fcd(idx) -= KcT(dirmapc[idx], gidx) * dirBC.val;
         }
     }
 }
