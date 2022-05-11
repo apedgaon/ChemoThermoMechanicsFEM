@@ -62,6 +62,8 @@ private:
     void compute_quad_stiffuT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KuTl);
     void compute_quad_massTT(unsigned iq, double det_jac, Eigen::MatrixXd& MTTl);
     void compute_quad_stiffcc(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& Kccl);
+    void compute_quad_stiffuc(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& Kucl);
+    void compute_quad_stiffcT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KcTl, Eigen::MatrixXd& KTcl);
     void apply_dirBC();
     void create_dirichlet_map();
     void reform_full_sol();

@@ -459,9 +459,12 @@ void CoupledFieldFEM<dim>::assemble3()
             compute_quad_stiffTT(iq, dNdX, det_jac, KTTl);
             compute_quad_stiffuT(iq, dNdX, det_jac, KuTl);
             compute_quad_stiffcc(iq, dNdX, det_jac, Kccl);
+            compute_quad_stiffuc(iq, dNdX, det_jac, Kucl);
+            compute_quad_stiffcT(iq, dNdX, det_jac, KcTl, KTcl);
 
             // Compute and add to local mass matrix
             compute_quad_massTT(iq, det_jac, MTTl);
+            Mccl = MTTl;
 
 
             // Not impl compute_quad_force()
@@ -488,6 +491,26 @@ void CoupledFieldFEM<dim>::assemble3()
 
             for (unsigned int idx = 0; idx < ldofs; ++idx)
                 KuT(gidx(idx), gidxT(jdx)) += KuTl(idx, jdx);
+
+            for (unsigned int idx = 0; idx < ldofsc; ++idx)
+                KcT(gidxc(idx), gidxT(jdx)) += KcTl(idx, jdx);
+        }
+
+        for (unsigned int jdx = 0; jdx < ldofsc; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ldofsc; ++idx)
+            {
+                Kcc(gidxc(idx), gidxc(jdx)) += Kccl(idx, jdx);
+                Mcc(gidxc(idx), gidxc(jdx)) += Mccl(idx, jdx);
+            }
+
+            Fc(gidxc(jdx)) += Fcl(jdx);
+
+            for (unsigned int idx = 0; idx < ldofs; ++idx)
+                Kuc(gidx(idx), gidxc(jdx)) += Kucl(idx, jdx);
+
+            for (unsigned int idx = 0; idx < ldofsT; ++idx)
+                KTc(gidxT(idx), gidxc(jdx)) += KTcl(idx, jdx);
         }
     }
 }
@@ -705,6 +728,72 @@ void CoupledFieldFEM<dim>::compute_quad_stiffcc(unsigned int iq, Eigen::MatrixXd
             }
 
             Kccl(ashp, bshp) += temp * wts(iq) * det_jac;
+        }
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_quad_stiffuc(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& Kucl)
+{
+    unsigned int loc_idx;
+    double temp, temp2;
+
+    for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
+    {
+        for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
+        {
+            for (unsigned int idim = 0; idim < dim; ++idim)
+            {
+                loc_idx = dim * ashp + idim;
+                temp = 0.0;
+                for (unsigned int jdim = 0; jdim < dim; ++jdim)
+                {
+                    temp2 = 0.0;
+                    for (unsigned int kdim = 0; kdim < dim; ++kdim)
+                    {
+                        for (unsigned int ldim = 0; ldim < dim; ++ldim)
+                            temp2 += mat.C[idim][jdim][kdim][ldim] * mat.alpha_c[kdim][ldim];
+                    }
+
+                    temp += dNdX(ashp, jdim) * temp2 * N(bshp, iq);
+                }
+
+                Kucl(loc_idx, bshp) += temp * wts(iq) * det_jac;
+            }
+        }
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_quad_stiffcT(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& KcTl,
+                                                Eigen::MatrixXd& KTcl)
+{
+    double temp, temp2;
+    for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
+    {
+        for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
+        {
+            temp = 0.0;
+            for (unsigned int idim = 0; idim < dim; ++idim)
+            {
+                temp2 = 0.0;
+                for (unsigned int jdim = 0; jdim < dim; ++jdim)
+                {
+                    for (unsigned int kdim = 0; kdim < dim; ++kdim)
+                    {
+                        for (unsigned int ldim = 0; ldim < dim; ++ldim)
+                        {
+                            for (unsigned int mdim = 0; mdim < dim; ++mdim)
+                                temp2 += mat.C[jdim][kdim][ldim][mdim] * mat.alpha_c[jdim][kdim] * mat.alpha_T[ldim][mdim];
+                        }
+                    }
+                }
+
+                temp += dNdX(ashp, idim) * temp2 * dNdX(bshp, idim);
+            }
+
+            KcTl(ashp, bshp) += mat.D_c * temp * wts(iq) * det_jac;
+            KTcl(ashp, bshp) += mat.D_T * temp * wts(iq) * det_jac;
         }
     }
 }
