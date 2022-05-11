@@ -99,6 +99,11 @@ struct Material
     double alpha_T[3][3];
     void init_isotropic_thermal_exp(double alpha);
     double D_T;
+
+    // Istropic Chemical exapansion
+    double alpha_c[3][3];
+    void init_isotropic_chemical_exp(double alpha);
+    double D_c;
 };
 
 struct DirichletBC

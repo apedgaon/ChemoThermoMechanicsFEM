@@ -30,6 +30,18 @@ void CoupledFieldFEM<dim>::initialize()
         dT = Eigen::VectorXd::Zero(gdofsT);
         KuT = Eigen::MatrixXd::Zero(gdofsu, gdofsT);
     }
+
+    if (phytype & (PhysicsType::_Thermal | PhysicsType::_Chemical))
+    {
+        gdofsc = mesh.Nnd;
+        Kcc = Eigen::MatrixXd::Zero(gdofsc, gdofsc);
+        Mcc = Eigen::MatrixXd::Zero(gdofsc, gdofsc);
+        Fc = Eigen::VectorXd::Zero(gdofsc);
+        dc = Eigen::VectorXd::Zero(gdofsc);
+        Kuc = Eigen::MatrixXd::Zero(gdofsu, gdofsc);
+        KcT = Eigen::MatrixXd::Zero(gdofsc, gdofsT);
+        KTc = Eigen::MatrixXd::Zero(gdofsT, gdofsc);
+    }
 }
 
 template<unsigned int dim>
@@ -70,6 +82,13 @@ void CoupledFieldFEM<dim>::solve2()
 
     // Reform full solution vector
     reform_full_sol();
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::solve3()
+{
+    // Assemble stiffness and force
+    assemble3();
 }
 
 template<unsigned int dim>
@@ -375,6 +394,105 @@ void CoupledFieldFEM<dim>::assemble2()
 }
 
 template<unsigned int dim>
+void CoupledFieldFEM<dim>::assemble3()
+{
+    // Initialize local arrays and variables
+    unsigned int ldofs = mesh.Nen * dim;
+    Eigen::MatrixXd Kl;                      // Local Stiffness
+    Eigen::VectorXd Fl;                      // Local Force
+    Eigen::MatrixXd xe(dim, mesh.Nen);       // Local Coordinates of nodes
+    Eigen::VectorXui gidx(ldofs);            // Global index of local dofs
+    Eigen::VectorXd de(mesh.Nen * dim);      // Local nodal displacements
+    Eigen::MatrixXd jac(dim, dim);           // Quadrature Isoparamteric Jacobian
+    Eigen::MatrixXd jac_inv(dim, dim);       // Quadrature Isoparamteric Jacobian Inverse
+    Eigen::MatrixXd dNdX(mesh.Nen, dim);     // Quadrature dN / dX matrices
+    double det_jac;                          // Determinant of Isoparametric Jacobian
+
+    unsigned int ldofsT = mesh.Nen;
+    Eigen::MatrixXd KuTl;
+    Eigen::MatrixXd KTTl;
+    Eigen::MatrixXd MTTl;
+    Eigen::VectorXd FTl;
+    Eigen::VectorXui gidxT(ldofsT);
+    Eigen::VectorXd Te(ldofsT);
+
+    unsigned int ldofsc = mesh.Nen;
+    Eigen::MatrixXd Kucl;
+    Eigen::MatrixXd KcTl;
+    Eigen::MatrixXd KTcl;
+    Eigen::MatrixXd Kccl;
+    Eigen::MatrixXd Mccl;
+    Eigen::VectorXd Fcl;
+    Eigen::VectorXui gidxc(ldofsc);
+    Eigen::VectorXd  ce(ldofsc);
+
+    // Element Loop
+    for (auto& conn : mesh.elem_conn)
+    {
+        // Initialize local stiffness and force
+        Kl = Eigen::MatrixXd::Zero(ldofs, ldofs);
+        Fl = Eigen::VectorXd::Zero(ldofs);
+        KTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
+        KuTl = Eigen::MatrixXd::Zero(ldofs, ldofsT);
+        MTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
+        FTl = Eigen::VectorXd::Zero(ldofsT);
+        Kccl = Eigen::MatrixXd::Zero(ldofsc, ldofsc);
+        Kucl = Eigen::MatrixXd::Zero(ldofs, ldofsc);
+        KcTl = Eigen::MatrixXd::Zero(ldofsc, ldofsT);
+        KTcl = Eigen::MatrixXd::Zero(ldofsT, ldofsc);
+        Mccl = Eigen::MatrixXd::Zero(ldofsc, ldofsc);
+        Fcl = Eigen::VectorXd::Zero(ldofsc);
+
+        // Compute Elemental quantities (elem coords and solutions)
+        compute_elem_quantities(conn, gidx, xe, de);
+        compute_elem_quantitiesT(conn, gidxT, Te);
+        compute_elem_quantitiesc(conn, gidxc, ce);
+
+        // Quadrature Loop
+        for (unsigned int iq = 0; iq < Nq; ++iq)
+        {
+            // Compute Quadrature Derivatives
+            compute_quad_derivatives(iq, xe, jac, jac_inv, dNdX, det_jac);
+
+            // Compute and add stiffness to local stiffness matrix
+            compute_quad_stiff(iq, dNdX, det_jac, Kl);
+            compute_quad_stiffTT(iq, dNdX, det_jac, KTTl);
+            compute_quad_stiffuT(iq, dNdX, det_jac, KuTl);
+            compute_quad_stiffcc(iq, dNdX, det_jac, Kccl);
+
+            // Compute and add to local mass matrix
+            compute_quad_massTT(iq, det_jac, MTTl);
+
+
+            // Not impl compute_quad_force()
+        }
+
+        // Global Assembly Kl -> K, Fl -> F
+        for (unsigned int jdx = 0; jdx < ldofs; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ldofs; ++idx)
+                Kuu(gidx(idx), gidx(jdx)) += Kl(idx, jdx);
+
+            Fu(gidx(jdx)) += Fl(jdx);
+        }
+
+        for (unsigned int jdx = 0; jdx < ldofsT; ++jdx)
+        {
+            for (unsigned int idx = 0; idx < ldofsT; ++idx)
+            {
+                KTT(gidxT(idx), gidxT(jdx)) += KTTl(idx, jdx);
+                MTT(gidxT(idx), gidxT(jdx)) += MTTl(idx, jdx);
+            }
+
+            FT(gidxT(jdx)) += FTl(jdx);
+
+            for (unsigned int idx = 0; idx < ldofs; ++idx)
+                KuT(gidx(idx), gidxT(jdx)) += KuTl(idx, jdx);
+        }
+    }
+}
+
+template<unsigned int dim>
 void CoupledFieldFEM<dim>::compute_elem_quantities(connectivity& conn, Eigen::VectorXui& gidx,
     Eigen::MatrixXd& xe, Eigen::VectorXd& de)
 {
@@ -399,6 +517,17 @@ void CoupledFieldFEM<dim>::compute_elem_quantitiesT(connectivity& conn, Eigen::V
     {
         gidxT(ind) = conn[ind];
         Te(ind) = dT(gidxT(ind));
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_elem_quantitiesc(connectivity& conn, Eigen::VectorXui& gidxc, Eigen::VectorXd& ce)
+{
+    // Computes global index and local concentration
+    for (unsigned int ind = 0; ind < mesh.Nen; ++ind)
+    {
+        gidxc(ind) = conn[ind];
+        ce(ind) = dc(gidxc(ind));
     }
 }
 
@@ -540,6 +669,43 @@ void CoupledFieldFEM<dim>::compute_quad_massTT(unsigned iq, double det_jac, Eige
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
             MTTl(ashp, bshp) += N(ashp, iq) * N(bshp, iq) * wts(iq) * det_jac;
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::compute_quad_stiffcc(unsigned int iq, Eigen::MatrixXd& dNdX, double det_jac, Eigen::MatrixXd& Kccl)
+{
+    double temp, temp2;
+
+    // Compute Local Temperature Stiffness (-> integral (w^T_,i  D^c (C_jkmn a_jk a_mn + 1)  T_,i) dV)
+    for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
+    {
+        for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
+        {
+            temp = 0.0;
+            for (unsigned int idim = 0; idim < dim; ++idim)
+            {
+                temp2 = 0.0;
+
+                // C_jkmn alpha_jk alpha_mn
+                for (unsigned int jdim = 0; jdim < dim; ++jdim)
+                {
+                    for (unsigned int kdim = 0; kdim < dim; ++kdim)
+                    {
+                        for (unsigned int ldim = 0; ldim < dim; ++ldim)
+                        {
+                            for (unsigned int mdim = 0; mdim < dim; ++mdim)
+                                temp2 += mat.C[jdim][kdim][ldim][mdim] * mat.alpha_c[jdim][kdim] * mat.alpha_c[ldim][mdim];
+                        }
+                    }
+                }
+
+                // dNdx(A, i) * (C_
+                temp += dNdX(ashp, idim) * mat.D_c * (temp2 + 1.0) * dNdX(bshp, idim);
+            }
+
+            Kccl(ashp, bshp) += temp * wts(iq) * det_jac;
+        }
     }
 }
 

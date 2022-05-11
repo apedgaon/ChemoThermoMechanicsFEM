@@ -783,6 +783,20 @@ void Material::init_isotropic_thermal_exp(double alpha)
     }
 }
 
+void Material::init_isotropic_chemical_exp(double alpha)
+{
+    for (unsigned int idx = 0; idx < 3; ++idx)
+    {
+        for (unsigned int jdx = 0; jdx < 3; ++jdx)
+        {
+            if (idx == jdx)
+                alpha_c[idx][jdx] = alpha;
+            else
+                alpha_c[idx][jdx] = 0.0;
+        }
+    }
+}
+
 // Printing Eigen::Matrix in a specified file
 void print_mat(Eigen::MatrixXd& A, std::string filename)
 {
