@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <string>
 #include "CoupledFieldFEM.h"
 
 template<unsigned int dim>
@@ -31,7 +32,7 @@ void CoupledFieldFEM<dim>::initialize()
         KuT = Eigen::MatrixXd::Zero(gdofsu, gdofsT);
     }
 
-    if (phytype & (PhysicsType::_Thermal | PhysicsType::_Chemical))
+    if ((phytype & PhysicsType::_Thermal) && (phytype & PhysicsType::_Chemical))
     {
         gdofsc = mesh.Nnd;
         Kcc = Eigen::MatrixXd::Zero(gdofsc, gdofsc);
@@ -69,6 +70,7 @@ void CoupledFieldFEM<dim>::solve2()
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
 
+    // Solve System of Equations
     double delta_t = end_time / nsteps;
     Eigen::VectorXd vTd;
     dTd = Eigen::VectorXd::Zero(ucdofsT);
@@ -92,6 +94,26 @@ void CoupledFieldFEM<dim>::solve3()
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
+
+    // Solve System of Equations
+    double delta_t = end_time / nsteps;
+    Eigen::VectorXd vTd;
+    Eigen::VectorXd vcd;
+    dTd = Eigen::VectorXd::Zero(ucdofsT);
+    dcd = Eigen::VectorXd::Zero(ucdofsc);
+    for (unsigned int istep = 1; istep <= nsteps; ++istep)
+    {
+        vcd = Mccd.ldlt().solve(Fcd - Kccd * dcd - KcTd * dTd);
+        vTd = MTTd.ldlt().solve(FTd - KTcd * dcd - KTTd * dTd);
+ 
+        dcd += delta_t * vcd;
+        dTd += delta_t * vTd;
+
+        dud = Kuud.ldlt().solve(Fud + KuTd * dTd + Kucd * dcd);
+    }
+
+    // Reform full solution vector
+    reform_full_sol();
 }
 
 template<unsigned int dim>
@@ -105,9 +127,16 @@ void CoupledFieldFEM<dim>::post_print(std::string file)
 
     if (phytype & PhysicsType::_Thermal)
     {
-        file = file + std::string("T");
-        std::cout << "*** Writing VTK file - " << file.c_str() << ".vtu\n";
-        fem_to_vtk_scalar(file, mesh.elem_conn, mesh.nodal_coords, dT);
+        std::string fileT = file + std::string("T");
+        std::cout << "*** Writing VTK file - " << fileT.c_str() << ".vtu\n";
+        fem_to_vtk_scalar(fileT, mesh.elem_conn, mesh.nodal_coords, dT);
+    }
+
+    if (phytype & PhysicsType::_Chemical)
+    {
+        std::string filec = file + std::string("c");
+        std::cout << "*** Writing VTK file - " << filec.c_str() << ".vtu\n";
+        fem_to_vtk_scalar(filec, mesh.elem_conn, mesh.nodal_coords, dc);
     }
 }
 
@@ -467,7 +496,7 @@ void CoupledFieldFEM<dim>::assemble3()
 
             // Compute and add to local mass matrix
             compute_quad_massTT(iq, det_jac, MTTl);
-            Mccl = MTTl;
+            compute_quad_massTT(iq, det_jac, Mccl);
 
 
             // Not impl compute_quad_force()
@@ -934,7 +963,7 @@ void CoupledFieldFEM<dim>::apply_dirBC()
         }
     }
 
-    if (phytype & (PhysicsType::_Thermal | PhysicsType::_Chemical))
+    if ((phytype & PhysicsType::_Chemical) && (phytype & PhysicsType::_Thermal))
     {
         Kccd = Eigen::MatrixXd::Zero(ucdofsc, ucdofsc);
         Kucd = Eigen::MatrixXd::Zero(ucdofsu, ucdofsc);
@@ -1001,6 +1030,12 @@ void CoupledFieldFEM<dim>::reform_full_sol()
     {
         for (unsigned int idx = 0; idx < ucdofsT; ++idx)
             dT(dirmapT[idx]) = dTd(idx);
+    }
+
+    if (phytype & PhysicsType::_Chemical)
+    {
+        for (unsigned int idx = 0; idx < ucdofsc; ++idx)
+            dc(dirmapc[idx]) = dcd(idx);
     }
 }
 
