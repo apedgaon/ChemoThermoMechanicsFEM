@@ -68,7 +68,7 @@ void Part2()
     fem.mat.lambda = 5.769230769230769e-05; // N/cm^2
     fem.mat.mu = 3.846153846153846e-05;     // N/cm^2
     fem.mat.init_elasticity_tensor();
-    fem.mat.D_T = 0.01;  // W/cm-K
+    fem.mat.D_T = 1e4;  // W/cm-K
     fem.mat.init_isotropic_thermal_exp(1.0);    // K^-1
 
     fem.mesh.mesh_type = MeshType::quadrilateral;
@@ -114,8 +114,8 @@ void Part2()
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal;
     fem.sol_scheme = SolutionScheme::staggered;
-    fem.nsteps = 10000;
-    fem.end_time = 100;
+    fem.nsteps = 1000;
+    fem.end_time = 0.0001;
 
     fem.initialize();
     fem.solve2();
@@ -131,9 +131,9 @@ void Part3()
     fem.mat.lambda = 5.769230769230769e-05; // N/cm^2
     fem.mat.mu = 3.846153846153846e-05;     // N/cm^2
     fem.mat.init_elasticity_tensor();
-    fem.mat.D_T = 0.01;  // W/cm-K
+    fem.mat.D_T = 1e4;  // W/cm-K
     fem.mat.init_isotropic_thermal_exp(1.0);    // K^-1
-    fem.mat.D_c = 0.01; // cm^2/s
+    fem.mat.D_c = 1e4; // cm^2/s
     fem.mat.init_isotropic_chemical_exp(1.0);    // K^-1
 
     fem.mesh.mesh_type = MeshType::quadrilateral;
@@ -190,8 +190,8 @@ void Part3()
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal | PhysicsType::_Chemical;
     fem.sol_scheme = SolutionScheme::staggered;
-    fem.nsteps = 10000;
-    fem.end_time = 100;
+    fem.nsteps = 1000;
+    fem.end_time = 0.0001;
 
     fem.initialize();
     fem.solve3();
