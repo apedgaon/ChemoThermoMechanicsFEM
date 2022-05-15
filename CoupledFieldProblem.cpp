@@ -213,7 +213,7 @@ void Part3()
     // Quadrature Setting
     fem.quadrature_type = QuadratureType::two_point;
 
-    // Physics and Solution Setting
+    // Physics and Solution Settings
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal | PhysicsType::_Chemical;
     fem.sol_scheme = SolutionScheme::staggered;
     fem.nsteps = 10000;
