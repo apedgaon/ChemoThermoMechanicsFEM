@@ -114,8 +114,8 @@ void Part2()
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal;
     fem.sol_scheme = SolutionScheme::staggered;
-    fem.nsteps = 1000;
-    fem.end_time = 0.0001;
+    fem.nsteps = 10000;
+    fem.end_time = 0.0005;
 
     fem.initialize();
     fem.solve2();
@@ -190,8 +190,8 @@ void Part3()
     fem.quadrature_type = QuadratureType::two_point;
     fem.phytype = PhysicsType::_Mechanics | PhysicsType::_Thermal | PhysicsType::_Chemical;
     fem.sol_scheme = SolutionScheme::staggered;
-    fem.nsteps = 1000;
-    fem.end_time = 0.0001;
+    fem.nsteps = 10000;
+    fem.end_time = 0.0005;
 
     fem.initialize();
     fem.solve3();

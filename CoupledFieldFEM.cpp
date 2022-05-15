@@ -80,6 +80,12 @@ void CoupledFieldFEM<dim>::solve2()
         dTd += delta_t * vTd;
 
         dud = Kuud.ldlt().solve(Fud + KuTd * dTd);
+
+        if (istep == 1 || (istep % 100 == 0))
+        {
+            reform_full_sol();
+            post_print(std::string("2p"), istep);
+        }
     }
 
     // Reform full solution vector
@@ -110,6 +116,12 @@ void CoupledFieldFEM<dim>::solve3()
         dTd += delta_t * vTd;
 
         dud = Kuud.ldlt().solve(Fud + KuTd * dTd + Kucd * dcd);
+
+        if (istep == 1 || (istep % 100 == 0))
+        {
+            reform_full_sol();
+            post_print(std::string("3p"), istep);
+        }
     }
 
     // Reform full solution vector
@@ -135,6 +147,29 @@ void CoupledFieldFEM<dim>::post_print(std::string file)
     if (phytype & PhysicsType::_Chemical)
     {
         std::string filec = file + std::string("c");
+        std::cout << "*** Writing VTK file - " << filec.c_str() << ".vtu\n";
+        fem_to_vtk_scalar(filec, mesh.elem_conn, mesh.nodal_coords, dc);
+    }
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::post_print(std::string file, unsigned int id)
+{
+    // Write vtk file with mesh and solutions
+    std::string fileu = file + std::to_string(id);
+    std::cout << "*** Writing VTK file - " << fileu.c_str() << ".vtu\n";
+    fem_to_vtk_vector(fileu, mesh.elem_conn, mesh.nodal_coords, du);
+
+    if (phytype & PhysicsType::_Thermal)
+    {
+        std::string fileT = file + std::string("T") + std::to_string(id);
+        std::cout << "*** Writing VTK file - " << fileT.c_str() << ".vtu\n";
+        fem_to_vtk_scalar(fileT, mesh.elem_conn, mesh.nodal_coords, dT);
+    }
+
+    if (phytype & PhysicsType::_Chemical)
+    {
+        std::string filec = file + std::string("c") + std::to_string(id);
         std::cout << "*** Writing VTK file - " << filec.c_str() << ".vtu\n";
         fem_to_vtk_scalar(filec, mesh.elem_conn, mesh.nodal_coords, dc);
     }

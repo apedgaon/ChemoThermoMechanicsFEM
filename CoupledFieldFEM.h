@@ -26,6 +26,7 @@ public:
     void solve2();
     void solve3();
     void post_print(std::string file);
+    void post_print(std::string file, unsigned int id);
 
     Geometry<dim> geom;
     Material mat;
