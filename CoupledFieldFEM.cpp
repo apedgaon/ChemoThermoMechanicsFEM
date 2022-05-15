@@ -16,12 +16,13 @@ void CoupledFieldFEM<dim>::initialize()
     // Initialize shape functions
     init_shp_functions();
 
-    // Initialize global vectors
+    // Initialize global vectors for mechanics
     gdofsu = mesh.Nnd * dim;
     Kuu = Eigen::MatrixXd::Zero(gdofsu, gdofsu);
     Fu = Eigen::VectorXd::Zero(gdofsu);
     du = Eigen::VectorXd::Zero(gdofsu);
 
+    // Initialize global vectors for thermal diffusion
     if (phytype & PhysicsType::_Thermal)
     {
         gdofsT = mesh.Nnd;
@@ -32,6 +33,7 @@ void CoupledFieldFEM<dim>::initialize()
         KuT = Eigen::MatrixXd::Zero(gdofsu, gdofsT);
     }
 
+    // Initialize global vectors for chemical diffusion
     if ((phytype & PhysicsType::_Thermal) && (phytype & PhysicsType::_Chemical))
     {
         gdofsc = mesh.Nnd;
@@ -56,6 +58,7 @@ void CoupledFieldFEM<dim>::solve()
         solveuTc();
 }
 
+// Purely for mechanics
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::solveu()
 {
@@ -72,10 +75,11 @@ void CoupledFieldFEM<dim>::solveu()
     reform_full_sol();
 }
 
+// For mechanics + thermal
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::solveuT()
 {
-    // Assemble stiffness and force
+    // Assemble mass, stiffness and force
     assembleuT();
 
     // Apply Dirichlet Boundary conditions
@@ -85,13 +89,16 @@ void CoupledFieldFEM<dim>::solveuT()
     double delta_t = end_time / nsteps;
     Eigen::VectorXd vTd;
     dTd = Eigen::VectorXd::Zero(ucdofsT);
-    for (unsigned int istep = 1; istep <= nsteps; ++istep)
+    for (unsigned int istep = 1; istep <= nsteps; ++istep) // time stepping loop
     {
+        // Compute thermal velocity and update temperatures
         vTd = MTTd.ldlt().solve(FTd - KTTd * dTd);
         dTd += delta_t * vTd;
 
+        // Update displacments based on temperatures
         dud = Kuud.ldlt().solve(Fud + KuTd * dTd);
 
+        // Print vtk files at certain frequency
         if (istep == 1 || (istep % 100 == 0))
         {
             reform_full_sol();
@@ -103,10 +110,11 @@ void CoupledFieldFEM<dim>::solveuT()
     reform_full_sol();
 }
 
+// For mechanics + thermal + chemical
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::solveuTc()
 {
-    // Assemble stiffness and force
+    // Assemble mass, stiffness and force
     assembleuTc();
 
     // Apply Dirichlet Boundary conditions
@@ -118,16 +126,20 @@ void CoupledFieldFEM<dim>::solveuTc()
     Eigen::VectorXd vcd;
     dTd = Eigen::VectorXd::Zero(ucdofsT);
     dcd = Eigen::VectorXd::Zero(ucdofsc);
-    for (unsigned int istep = 1; istep <= nsteps; ++istep)
+    for (unsigned int istep = 1; istep <= nsteps; ++istep) // time stepping loop
     {
+        // Compute chemical and thermal velocities
         vcd = Mccd.ldlt().solve(Fcd - Kccd * dcd - KcTd * dTd);
         vTd = MTTd.ldlt().solve(FTd - KTcd * dcd - KTTd * dTd);
  
+        // Update compositions and temperatures
         dcd += delta_t * vcd;
         dTd += delta_t * vTd;
 
+        // Update displacements based on composition and temperature
         dud = Kuud.ldlt().solve(Fud + KuTd * dTd + Kucd * dcd);
 
+        // Print vtk files at certain frequency
         if (istep == 1 || (istep % 100 == 0))
         {
             reform_full_sol();
@@ -144,12 +156,13 @@ void CoupledFieldFEM<dim>::post_print(std::string file)
 {
     //raw_sol_print();
 
-    // Write vtk file with mesh and solutions
+    // Write vtk file with mesh and displacement field solutions
     std::cout << "*** Writing VTK file - " << file.c_str() << ".vtu\n";
     fem_to_vtk_vector(file, mesh.elem_conn, mesh.nodal_coords, du);
 
     if (phytype & PhysicsType::_Thermal)
     {
+        // Write vtk file with mesh and temperature field solutions
         std::string fileT = file + std::string("T");
         std::cout << "*** Writing VTK file - " << fileT.c_str() << ".vtu\n";
         fem_to_vtk_scalar(fileT, mesh.elem_conn, mesh.nodal_coords, dT);
@@ -157,6 +170,7 @@ void CoupledFieldFEM<dim>::post_print(std::string file)
 
     if (phytype & PhysicsType::_Chemical)
     {
+        // Write vtk file with mesh and composition field solutions
         std::string filec = file + std::string("c");
         std::cout << "*** Writing VTK file - " << filec.c_str() << ".vtu\n";
         fem_to_vtk_scalar(filec, mesh.elem_conn, mesh.nodal_coords, dc);
@@ -166,13 +180,14 @@ void CoupledFieldFEM<dim>::post_print(std::string file)
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::post_print(std::string file, unsigned int id)
 {
-    // Write vtk file with mesh and solutions
+    // Write vtk file with mesh and displacement field solutions
     std::string fileu = file + std::to_string(id);
     std::cout << "*** Writing VTK file - " << fileu.c_str() << ".vtu\n";
     fem_to_vtk_vector(fileu, mesh.elem_conn, mesh.nodal_coords, du);
 
     if (phytype & PhysicsType::_Thermal)
     {
+        // Write vtk file with mesh and temperature field solutions
         std::string fileT = file + std::string("T") + std::to_string(id);
         std::cout << "*** Writing VTK file - " << fileT.c_str() << ".vtu\n";
         fem_to_vtk_scalar(fileT, mesh.elem_conn, mesh.nodal_coords, dT);
@@ -180,6 +195,7 @@ void CoupledFieldFEM<dim>::post_print(std::string file, unsigned int id)
 
     if (phytype & PhysicsType::_Chemical)
     {
+        // Write vtk file with mesh and composition field solutions
         std::string filec = file + std::string("c") + std::to_string(id);
         std::cout << "*** Writing VTK file - " << filec.c_str() << ".vtu\n";
         fem_to_vtk_scalar(filec, mesh.elem_conn, mesh.nodal_coords, dc);
@@ -341,6 +357,7 @@ void CoupledFieldFEM<dim>::init_shp_functions()
     }
 }
 
+// For mechanics only
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::assembleu()
 {
@@ -378,7 +395,7 @@ void CoupledFieldFEM<dim>::assembleu()
             // Not impl compute_quad_force()
         }
 
-        // Global Assembly Kl -> K, Fl -> F
+        // Global Assembly Kl -> Kuu, Fl -> Fu
         for (unsigned int jdx = 0; jdx < ldofs; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofs; ++idx)
@@ -389,11 +406,11 @@ void CoupledFieldFEM<dim>::assembleu()
     }
 }
 
-
+// For mechanics + thermal
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::assembleuT()
 {
-    // Initialize local arrays and variables
+    // Initialize local arrays and variables for mechanics
     unsigned int ldofs = mesh.Nen * dim;
     Eigen::MatrixXd Kl;                      // Local Stiffness
     Eigen::VectorXd Fl;                      // Local Force
@@ -405,6 +422,7 @@ void CoupledFieldFEM<dim>::assembleuT()
     Eigen::MatrixXd dNdX(mesh.Nen, dim);     // Quadrature dN / dX matrices
     double det_jac;                          // Determinant of Isoparametric Jacobian
 
+    // Initialize local arrays and variables for thermal
     unsigned int ldofsT = mesh.Nen;
     Eigen::MatrixXd KuTl;
     Eigen::MatrixXd KTTl;
@@ -416,7 +434,7 @@ void CoupledFieldFEM<dim>::assembleuT()
     // Element Loop
     for (auto& conn : mesh.elem_conn)
     {
-        // Initialize local stiffness and force
+        // Initialize local mass, stiffness and force
         Kl = Eigen::MatrixXd::Zero(ldofs, ldofs);
         Fl = Eigen::VectorXd::Zero(ldofs);
         KTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
@@ -446,7 +464,7 @@ void CoupledFieldFEM<dim>::assembleuT()
             // Not impl compute_quad_force()
         }
 
-        // Global Assembly Kl -> K, Fl -> F
+        // Global Assembly Kl -> Kuu, Fl -> Fu
         for (unsigned int jdx = 0; jdx < ldofs; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofs; ++idx)
@@ -455,6 +473,7 @@ void CoupledFieldFEM<dim>::assembleuT()
             Fu(gidx(jdx)) += Fl(jdx);
         }
 
+        // Global Assembly KTTl -> KTT, FTl -> FT, MTTl -> MTT, KuTl -> KuT
         for (unsigned int jdx = 0; jdx < ldofsT; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofsT; ++idx)
@@ -471,10 +490,11 @@ void CoupledFieldFEM<dim>::assembleuT()
     }
 }
 
+// For mechanics + thermal + chemical
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::assembleuTc()
 {
-    // Initialize local arrays and variables
+    // Initialize local arrays and variables for mechanics
     unsigned int ldofs = mesh.Nen * dim;
     Eigen::MatrixXd Kl;                      // Local Stiffness
     Eigen::VectorXd Fl;                      // Local Force
@@ -486,6 +506,7 @@ void CoupledFieldFEM<dim>::assembleuTc()
     Eigen::MatrixXd dNdX(mesh.Nen, dim);     // Quadrature dN / dX matrices
     double det_jac;                          // Determinant of Isoparametric Jacobian
 
+     // Initialize local arrays and variables for thermal
     unsigned int ldofsT = mesh.Nen;
     Eigen::MatrixXd KuTl;
     Eigen::MatrixXd KTTl;
@@ -494,6 +515,7 @@ void CoupledFieldFEM<dim>::assembleuTc()
     Eigen::VectorXui gidxT(ldofsT);
     Eigen::VectorXd Te(ldofsT);
 
+    // Initialize local arrays and variables for chemical
     unsigned int ldofsc = mesh.Nen;
     Eigen::MatrixXd Kucl;
     Eigen::MatrixXd KcTl;
@@ -507,7 +529,7 @@ void CoupledFieldFEM<dim>::assembleuTc()
     // Element Loop
     for (auto& conn : mesh.elem_conn)
     {
-        // Initialize local stiffness and force
+        // Initialize local mass, stiffness and force
         Kl = Eigen::MatrixXd::Zero(ldofs, ldofs);
         Fl = Eigen::VectorXd::Zero(ldofs);
         KTTl = Eigen::MatrixXd::Zero(ldofsT, ldofsT);
@@ -548,7 +570,7 @@ void CoupledFieldFEM<dim>::assembleuTc()
             // Not impl compute_quad_force()
         }
 
-        // Global Assembly Kl -> K, Fl -> F
+        // Global Assembly Kl -> Kuu, Fl -> Fu
         for (unsigned int jdx = 0; jdx < ldofs; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofs; ++idx)
@@ -557,6 +579,8 @@ void CoupledFieldFEM<dim>::assembleuTc()
             Fu(gidx(jdx)) += Fl(jdx);
         }
 
+        // Global Assembly KTTl -> KTT, FTl -> FT, MTTl -> MTT,
+        // KuTl -> KuT, KcTl -> KcT
         for (unsigned int jdx = 0; jdx < ldofsT; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofsT; ++idx)
@@ -574,6 +598,8 @@ void CoupledFieldFEM<dim>::assembleuTc()
                 KcT(gidxc(idx), gidxT(jdx)) += KcTl(idx, jdx);
         }
 
+        // Global Assembly Kccl -> Kcc, Fcl -> Fc, Mccl -> Mcc,
+        // KuTl -> KuT, KTcl -> KTc
         for (unsigned int jdx = 0; jdx < ldofsc; ++jdx)
         {
             for (unsigned int idx = 0; idx < ldofsc; ++idx)
@@ -624,7 +650,7 @@ void CoupledFieldFEM<dim>::compute_elem_quantitiesT(connectivity& conn, Eigen::V
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::compute_elem_quantitiesc(connectivity& conn, Eigen::VectorXui& gidxc, Eigen::VectorXd& ce)
 {
-    // Computes global index and local concentration
+    // Computes global index and local composition
     for (unsigned int ind = 0; ind < mesh.Nen; ++ind)
     {
         gidxc(ind) = conn[ind];
@@ -699,7 +725,7 @@ void CoupledFieldFEM<dim>::compute_quad_stiffTT(unsigned int iq, Eigen::MatrixXd
 {
     double temp, temp2;
 
-    // Compute Local Temperature Stiffness (-> integral (w^T_,i  D^T (C_jkmn a_jk a_mn + 1)  T_,i) dV)
+    // Compute Local Temperature Stiffness (-> integral (w^T_,i  D^T (C_jkmn a^T_jk a^T_mn + 1)  T_,i) dV)
     for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
@@ -722,7 +748,6 @@ void CoupledFieldFEM<dim>::compute_quad_stiffTT(unsigned int iq, Eigen::MatrixXd
                     }
                 }
 
-                // dNdx(A, i) * (C_
                 temp += dNdX(ashp, idim) * mat.D_T * (temp2 + 1.0) * dNdX(bshp, idim);
             }
 
@@ -736,7 +761,7 @@ void CoupledFieldFEM<dim>::compute_quad_stiffuT(unsigned int iq, Eigen::MatrixXd
 {
     unsigned int loc_idx;
     double temp, temp2;
-
+    // Compute Local Displacment Temperature Stiffness (-> integral (w^u_(i,j) C_ijkl a^T_kl  T) dV)
     for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
@@ -766,6 +791,7 @@ void CoupledFieldFEM<dim>::compute_quad_stiffuT(unsigned int iq, Eigen::MatrixXd
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::compute_quad_massTT(unsigned iq, double det_jac, Eigen::MatrixXd& MTTl)
 {
+    // Compute Local Mass Matrix (-> integral (w^T  T_,t) dV)
     for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
@@ -778,7 +804,7 @@ void CoupledFieldFEM<dim>::compute_quad_stiffcc(unsigned int iq, Eigen::MatrixXd
 {
     double temp, temp2;
 
-    // Compute Local Temperature Stiffness (-> integral (w^T_,i  D^c (C_jkmn a_jk a_mn + 1)  T_,i) dV)
+    // Compute Local Temperature Stiffness (-> integral (w^c_,i  D^c (C_jkmn a^c_jk a&c_mn + 1)  c_,i) dV)
     for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
@@ -801,7 +827,6 @@ void CoupledFieldFEM<dim>::compute_quad_stiffcc(unsigned int iq, Eigen::MatrixXd
                     }
                 }
 
-                // dNdx(A, i) * (C_
                 temp += dNdX(ashp, idim) * mat.D_c * (temp2 + 1.0) * dNdX(bshp, idim);
             }
 
@@ -815,7 +840,7 @@ void CoupledFieldFEM<dim>::compute_quad_stiffuc(unsigned int iq, Eigen::MatrixXd
 {
     unsigned int loc_idx;
     double temp, temp2;
-
+    // Compute Local Displacment Temperature Stiffness (-> integral (w^u_(i,j) C_ijkl a^c_kl  c) dV)
     for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
@@ -847,6 +872,9 @@ void CoupledFieldFEM<dim>::compute_quad_stiffcT(unsigned int iq, Eigen::MatrixXd
                                                 Eigen::MatrixXd& KTcl)
 {
     double temp, temp2;
+    // Compute Local composition Temperature Stiffness 
+    // (-> integral (w^c_(,i) D^c C C_ijkl a^T_kl  T_(,i) dV)
+    // (-> integral (w^T_(,i) D^T C C_ijkl a^c_kl  c_(,i) dV)
     for (unsigned int bshp = 0; bshp < mesh.Nen; ++bshp)
     {
         for (unsigned int ashp = 0; ashp < mesh.Nen; ++ashp)
@@ -964,6 +992,7 @@ void CoupledFieldFEM<dim>::apply_dirBC()
         Fud(jdx) = Fu(dirmapu[jdx]);
     }
 
+    // For mechanics
     for (auto& dirBC : dirBCs)
     {
         unsigned gidx = dirBC.node * dim + dirBC.dof;
@@ -972,6 +1001,7 @@ void CoupledFieldFEM<dim>::apply_dirBC()
             Fud(idx) -= Kuu(dirmapu[idx], gidx) * dirBC.val;
     }
 
+    // For mechanics + thermal
     if (phytype & PhysicsType::_Thermal)
     {
         KTTd = Eigen::MatrixXd::Zero(ucdofsT, ucdofsT);
@@ -1009,6 +1039,7 @@ void CoupledFieldFEM<dim>::apply_dirBC()
         }
     }
 
+    // For mechanics + thermal + chemical
     if ((phytype & PhysicsType::_Chemical) && (phytype & PhysicsType::_Thermal))
     {
         Kccd = Eigen::MatrixXd::Zero(ucdofsc, ucdofsc);
