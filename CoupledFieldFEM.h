@@ -23,8 +23,6 @@ public:
     void generate_mesh();
     void initialize();
     void solve();
-    void solve2();
-    void solve3();
     void post_print(std::string file);
     void post_print(std::string file, unsigned int id);
 
@@ -49,10 +47,13 @@ public:
 
 
 private:
+    void solveu();
+    void solveuT();
+    void solveuTc();
     void init_shp_functions();
-    void assemble();
-    void assemble2();
-    void assemble3();
+    void assembleu();
+    void assembleuT();
+    void assembleuTc();
     void compute_elem_quantities(connectivity& conn, Eigen::VectorXui& gidx, Eigen::MatrixXd& xe, Eigen::VectorXd& de);
     void compute_elem_quantitiesT(connectivity& conn, Eigen::VectorXui& gidxT, Eigen::VectorXd& Te);
     void compute_elem_quantitiesc(connectivity& conn, Eigen::VectorXui& gidxc, Eigen::VectorXd& ce);

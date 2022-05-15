@@ -48,8 +48,19 @@ void CoupledFieldFEM<dim>::initialize()
 template<unsigned int dim>
 void CoupledFieldFEM<dim>::solve()
 {
+    if (phytype == PhysicsType::_Mechanics)
+        solveu();
+    else if (phytype == (PhysicsType::_Mechanics | PhysicsType::_Thermal))
+        solveuT();
+    else if (phytype == (PhysicsType::_Mechanics | PhysicsType::_Thermal | PhysicsType::_Chemical))
+        solveuTc();
+}
+
+template<unsigned int dim>
+void CoupledFieldFEM<dim>::solveu()
+{
     // Assemble stiffness and force
-    assemble();
+    assembleu();
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
@@ -62,10 +73,10 @@ void CoupledFieldFEM<dim>::solve()
 }
 
 template<unsigned int dim>
-void CoupledFieldFEM<dim>::solve2()
+void CoupledFieldFEM<dim>::solveuT()
 {
     // Assemble stiffness and force
-    assemble2();
+    assembleuT();
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
@@ -93,10 +104,10 @@ void CoupledFieldFEM<dim>::solve2()
 }
 
 template<unsigned int dim>
-void CoupledFieldFEM<dim>::solve3()
+void CoupledFieldFEM<dim>::solveuTc()
 {
     // Assemble stiffness and force
-    assemble3();
+    assembleuTc();
 
     // Apply Dirichlet Boundary conditions
     apply_dirBC();
@@ -331,7 +342,7 @@ void CoupledFieldFEM<dim>::init_shp_functions()
 }
 
 template<unsigned int dim>
-void CoupledFieldFEM<dim>::assemble()
+void CoupledFieldFEM<dim>::assembleu()
 {
     // Initialize local arrays and variables
     unsigned int ldofs = mesh.Nen * dim;
@@ -380,7 +391,7 @@ void CoupledFieldFEM<dim>::assemble()
 
 
 template<unsigned int dim>
-void CoupledFieldFEM<dim>::assemble2()
+void CoupledFieldFEM<dim>::assembleuT()
 {
     // Initialize local arrays and variables
     unsigned int ldofs = mesh.Nen * dim;
@@ -461,7 +472,7 @@ void CoupledFieldFEM<dim>::assemble2()
 }
 
 template<unsigned int dim>
-void CoupledFieldFEM<dim>::assemble3()
+void CoupledFieldFEM<dim>::assembleuTc()
 {
     // Initialize local arrays and variables
     unsigned int ldofs = mesh.Nen * dim;

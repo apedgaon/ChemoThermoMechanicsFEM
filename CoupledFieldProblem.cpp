@@ -135,7 +135,7 @@ void Part2()
 
     // Initialize, Solve and Post process
     fem.initialize();
-    fem.solve2();
+    fem.solve();
     fem.post_print("part2");
 }
 
@@ -221,7 +221,7 @@ void Part3()
 
     // Initialize, Solve and Post process
     fem.initialize();
-    fem.solve3();
+    fem.solve();
     fem.post_print("part3");
 }
 
